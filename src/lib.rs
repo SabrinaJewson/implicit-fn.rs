@@ -465,14 +465,7 @@ mod tests {
     #[test]
     fn identity() {
         assert_output!((_), (|p0| p0));
-        assert_output!(
-            {
-                {
-                    _
-                }
-            },
-            { |p0| { p0 } }
-        );
+        assert_output!({ { _ } }, { |p0| { p0 } });
     }
 
     #[test]
@@ -619,25 +612,19 @@ mod tests {
 
     use super::maybe_make_closure;
     use proc_macro2::TokenStream;
-    use quote::quote;
     use quote::ToTokens as _;
+    use quote::quote;
     use syn::Expr;
 }
 
 use proc_macro2::Ident;
 use proc_macro2::Span;
 use proc_macro2::TokenStream;
-use quote::quote_spanned;
 use quote::ToTokens;
+use quote::quote_spanned;
 use std::fmt::Display;
 use std::mem::replace;
 use std::mem::take;
-use syn::parse::ParseStream;
-use syn::punctuated;
-use syn::punctuated::Punctuated;
-use syn::visit_mut::visit_expr_mut;
-use syn::visit_mut::visit_generic_argument_mut;
-use syn::visit_mut::VisitMut;
 use syn::Expr;
 use syn::ExprClosure;
 use syn::GenericArgument;
@@ -648,3 +635,9 @@ use syn::PatIdent;
 use syn::ReturnType;
 use syn::Token;
 use syn::TypeArray;
+use syn::parse::ParseStream;
+use syn::punctuated;
+use syn::punctuated::Punctuated;
+use syn::visit_mut::VisitMut;
+use syn::visit_mut::visit_expr_mut;
+use syn::visit_mut::visit_generic_argument_mut;
