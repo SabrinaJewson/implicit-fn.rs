@@ -90,17 +90,20 @@
 /// + The closure is always large enough such that
 ///   identity functions (i.e. `|x| x`) are never generated,
 ///   except for `(_)` which is always an identity function.
-/// + The closure encompasses as many “transparent” syntactic elements as it can,
-///   where the transparent elements are
-///   - unary and binary operators (e.g. prefix `*` and `!`, `/`, or `+=`);
-///   - `.await`, `?`, field access, and
-///     the left hand side of method calls and indexing expressions;
-///   - the conditions of `while` and `if`,
-///     the iterator in `for` and the scrutinee of a `match`, and
-///   - both sides of a range expression (e.g. `_..=5`).
-///
-/// Notably, `f(_ + 5)` will always parse as `f(|x| x + 5)` and not `|x| f(x + 5)`,
-/// and `(_ + 1) * 2` will parse as `(|x| x + 1) * 2`.
+/// + As many operators are included in the closure as possible,
+///   including binary ones (e.g. `_ + _`, `_ += _`, `_ / _`, `_.._`),
+///   unary ones (e.g. `-_`, `!_`, `&_`, `&raw mut _`)
+///   and suffix ones (e.g. `_.0`, `_.await`, `_?`, `_()`, `_[i]`, `_ as u32`).
+///   - For example, `f(_.await[i] + 1) + 1`  becomes `f(|x| x.await[i] + 1) + 1`.
+///   - Brackets are not included: `(_ + 1) * 2` will parse as `(|x| x + 1) * 2`.
+/// + The targets of control flow expressions are also included, i.e.
+///   `while _ {}`,
+///   `if _ {}`,
+///   `match _ {}` and
+///   `for pattern in _ {}`.
+///   - For example, `f(match _ + 1 {})` becomes `f(|x| match x + 1 {})`.
+///   - However, `f(match foo { _ => _ + 1 })` becomes `f(match foo { _ => |x| x + 1 })`,
+///     i.e. the `match` is not included in the closure.
 ///
 /// For examples, see [the crate docs](crate).
 ///
@@ -217,9 +220,8 @@ fn replace_holes(st: &mut ReplaceHoles, e: &mut Expr) {
             replace_holes(st, &mut e.left);
             replace_holes(st, &mut e.right);
         }
-        Expr::Call(e) => {
-            replace_holes(st, &mut e.func);
-        }
+        Expr::Call(e) => replace_holes(st, &mut e.func),
+        Expr::Cast(e) => replace_holes(st, &mut e.expr),
         Expr::Field(e) => replace_holes(st, &mut e.base),
         Expr::ForLoop(e) => replace_holes(st, &mut e.expr),
         Expr::If(e) => {
@@ -240,6 +242,8 @@ fn replace_holes(st: &mut ReplaceHoles, e: &mut Expr) {
                 replace_holes(st, end);
             }
         }
+        Expr::RawAddr(e) => replace_holes(st, &mut e.expr),
+        Expr::Reference(e) => replace_holes(st, &mut e.expr),
         Expr::Try(e) => {
             st.is_try.get_or_insert(e.question_token.span);
             replace_holes(st, &mut e.expr);
@@ -559,6 +563,8 @@ mod tests {
         assert_output!(f(_).await, async |p0| f(p0).await);
         assert_output!(f(_) + 1, |p0| f(p0) + 1);
         assert_output!(x += f(_), |p0| x += f(p0));
+        assert_output!(f(_)(), |p0| f(p0)());
+        assert_output!(f(_) as u32, |p0| f(p0) as u32);
         assert_output!(f(_).f, |p0| f(p0).f);
         assert_output!(for _ in f(_) {}, |p0| for _ in f(p0) {});
         assert_output!(if f(_) {}, |p0| if f(p0) {});
@@ -575,6 +581,8 @@ mod tests {
         assert_output!(match f(_) {}, |p0| match f(p0) {});
         assert_output!(f(_).g(), |p0| f(p0).g());
         assert_output!(_..x, |p0| p0..x);
+        assert_output!(&raw const f(_), |p0| &raw const f(p0));
+        assert_output!(&f(_), |p0| &f(p0));
         // This doesn’t even parse for some reason:
         // assert_output!(x..=_, |p0| x..p0);
         assert_output!(f(_)?, |p0| ::core::result::Result::Ok(f(p0)?));
